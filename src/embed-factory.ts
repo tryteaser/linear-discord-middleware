@@ -1,5 +1,5 @@
 import { type DiscordEmbed } from "./discord-client.js";
-import { type LinearIssue, type LinearComment } from "./schemas.js";
+import { type LinearIssue, type LinearComment, type LinearUser } from "./schemas.js";
 
 /**
  * Factory class for creating Discord embeds for different Linear entity types
@@ -10,19 +10,20 @@ export class EmbedFactory {
 	 */
 	static createIssueEmbed(
 		action: "create" | "update" | "remove",
+		actor: LinearUser,
 		issueData: LinearIssue,
 		url: string,
 		updatedFrom?: Partial<LinearIssue>
 	): DiscordEmbed {
 		switch (action) {
 			case "create":
-				return this.createIssueCreateEmbed(issueData, url);
+				return this.createIssueCreateEmbed(actor, issueData, url);
 			case "update":
-				return this.createIssueUpdateEmbed(issueData, url, updatedFrom);
+				return this.createIssueUpdateEmbed(actor, issueData, url, updatedFrom);
 			case "remove":
-				return this.createIssueDeleteEmbed(issueData);
+				return this.createIssueDeleteEmbed(actor, issueData);
 			default:
-				return this.createGenericEmbed("Issue", action, issueData, url);
+				return this.createGenericEmbed("Issue", action, actor, issueData, url);
 		}
 	}
 
@@ -31,18 +32,19 @@ export class EmbedFactory {
 	 */
 	static createCommentEmbed(
 		action: "create" | "update" | "remove",
+		actor: LinearUser,
 		commentData: LinearComment,
 		url: string
 	): DiscordEmbed {
 		switch (action) {
 			case "create":
-				return this.createCommentCreateEmbed(commentData, url);
+				return this.createCommentCreateEmbed(actor, commentData, url);
 			case "update":
-				return this.createCommentUpdateEmbed(commentData, url);
+				return this.createCommentUpdateEmbed(actor, commentData, url);
 			case "remove":
-				return this.createCommentDeleteEmbed(commentData);
+				return this.createCommentDeleteEmbed(actor, commentData);
 			default:
-				return this.createGenericEmbed("Comment", action, commentData, url);
+				return this.createGenericEmbed("Comment", action, actor, commentData, url);
 		}
 	}
 
@@ -52,37 +54,38 @@ export class EmbedFactory {
 	static createEntityEmbed(
 		type: string,
 		action: "create" | "update" | "remove",
+		actor: LinearUser,
 		data: any,
 		url: string
 	): DiscordEmbed {
 		switch (type) {
 			case "Project":
-				return this.createProjectEmbed(action, data, url);
+				return this.createProjectEmbed(action, actor, data, url);
 			case "Team":
-				return this.createTeamEmbed(action, data, url);
+				return this.createTeamEmbed(action, actor, data, url);
 			case "User":
-				return this.createUserEmbed(action, data, url);
+				return this.createUserEmbed(action, actor, data, url);
 			case "Cycle":
-				return this.createCycleEmbed(action, data, url);
+				return this.createCycleEmbed(action, actor, data, url);
 			case "IssueLabel":
-				return this.createLabelEmbed(action, data, url);
+				return this.createLabelEmbed(action, actor, data, url);
 			default:
-				return this.createGenericEmbed(type, action, data, url);
+				return this.createGenericEmbed(type, action, actor, data, url);
 		}
 	}
 
 	// --- Issue Embed Creators ---
 
-	private static createIssueCreateEmbed(issueData: LinearIssue, url: string): DiscordEmbed {
+	private static createIssueCreateEmbed(actor: LinearUser, issueData: LinearIssue, url: string): DiscordEmbed {
 		const {
 			id,
 			title,
 			description,
 			state,
 			assignee,
-			creator,
-			team,
+				team,
 			priority,
+			priorityLabel,
 			project,
 			cycle,
 			labels,
@@ -91,6 +94,9 @@ export class EmbedFactory {
 			number,
 			customerTicketCount,
 			createdAt,
+			dueDate,
+			subscriberIds,
+			parentId,
 		} = issueData;
 
 		// Build comprehensive description with issue details
@@ -115,6 +121,17 @@ export class EmbedFactory {
 		if (customerTicketCount && customerTicketCount > 0) {
 			contextInfo.push(`👥 **Customer Requests:** ${customerTicketCount}`);
 		}
+		if (dueDate) {
+			const dueDateFormatted = new Date(dueDate).toLocaleDateString();
+			const isOverdue = new Date(dueDate) < new Date();
+			contextInfo.push(`📅 **Due Date:** ${dueDateFormatted}${isOverdue ? " ⚠️ *OVERDUE*" : ""}`);
+		}
+		if (subscriberIds && subscriberIds.length > 1) { // More than just the creator
+			contextInfo.push(`👀 **Watchers:** ${subscriberIds.length} people watching`);
+		}
+		if (parentId) {
+			contextInfo.push(`🔗 **Sub-issue** of parent issue`);
+		}
 
 		if (contextInfo.length > 0) {
 			fullDescription += "\n\n" + contextInfo.join("\n");
@@ -123,9 +140,9 @@ export class EmbedFactory {
 		const fields = [
 			{ name: "🏢 Team", value: team?.name || "Unknown Team", inline: true },
 			{ name: "📊 Status", value: state?.name || "No Status", inline: true },
-			{ name: "⚡ Priority", value: priority?.name || "No Priority", inline: true },
+			{ name: "⚡ Priority", value: priorityLabel || priority?.name || "No Priority", inline: true },
 			{ name: "👤 Assignee", value: assignee?.displayName || assignee?.name || "Unassigned", inline: true },
-			{ name: "✨ Created By", value: creator?.displayName || creator?.name || "Unknown", inline: true },
+			{ name: "✨ Created By", value: actor?.displayName || actor?.name || "Unknown", inline: true },
 			{ name: "🔢 Issue ID", value: `${identifier || `#${number}` || id}`, inline: true },
 		];
 
@@ -137,7 +154,7 @@ export class EmbedFactory {
 			fields.push({ name: "📅 Cycle Timeline", value: cycleInfo.join(" • "), inline: false });
 		}
 
-		return {
+		const embed: DiscordEmbed = {
 			title: `🆕 Issue Created: ${title}`,
 			url: url,
 			description: fullDescription.substring(0, 4096), // Discord limit
@@ -149,9 +166,21 @@ export class EmbedFactory {
 			},
 			timestamp: createdAt || new Date().toISOString(),
 		};
+
+		// Add actor avatar if available
+		if (actor?.avatarUrl) {
+			embed.author = {
+				name: actor.displayName || actor.name || "Unknown User",
+				icon_url: actor.avatarUrl,
+				url: actor.url, // Link to Linear profile
+			};
+		}
+
+		return embed;
 	}
 
 	private static createIssueUpdateEmbed(
+		actor: LinearUser,
 		issueData: LinearIssue,
 		url: string,
 		updatedFrom: Partial<LinearIssue> = {}
@@ -163,15 +192,18 @@ export class EmbedFactory {
 			state, 
 			assignee, 
 			team, 
-			priority, 
+			priority,
+			priorityLabel, 
 			project,
 			cycle,
 			labels,
 			estimate,
 			identifier,
 			number,
-			updater,
 			updatedAt,
+			dueDate,
+			completedAt,
+			startedAt,
 		} = issueData;
 		
 		const changes: string[] = [];
@@ -231,6 +263,27 @@ export class EmbedFactory {
 			}
 		}
 
+		// Lifecycle changes
+		if (updatedFrom.startedAt !== startedAt) {
+			if (!updatedFrom.startedAt && startedAt) {
+				changes.push(`▶️ **Started:** ${new Date(startedAt).toLocaleDateString()}`);
+			}
+		}
+		if (updatedFrom.completedAt !== completedAt) {
+			if (!updatedFrom.completedAt && completedAt) {
+				changes.push(`✅ **Completed:** ${new Date(completedAt).toLocaleDateString()}`);
+			}
+		}
+		if (updatedFrom.dueDate !== dueDate) {
+			if (!updatedFrom.dueDate && dueDate) {
+				changes.push(`📅 **Due Date Set:** ${new Date(dueDate).toLocaleDateString()}`);
+			} else if (updatedFrom.dueDate && !dueDate) {
+				changes.push(`📅 **Due Date Removed**`);
+			} else if (updatedFrom.dueDate && dueDate) {
+				changes.push(`📅 **Due Date Changed:** ${new Date(updatedFrom.dueDate).toLocaleDateString()} → **${new Date(dueDate).toLocaleDateString()}**`);
+			}
+		}
+
 		// Build enhanced description
 		let fullDescription = "";
 		if (changes.length > 0) {
@@ -248,8 +301,8 @@ export class EmbedFactory {
 			{ name: "🏢 Team", value: team?.name || "Unknown Team", inline: true },
 			{ name: "📊 Current Status", value: state?.name || "No Status", inline: true },
 			{ name: "👤 Current Assignee", value: assignee?.displayName || assignee?.name || "Unassigned", inline: true },
-			{ name: "⚡ Priority", value: priority?.name || "No Priority", inline: true },
-			{ name: "🔧 Updated By", value: updater?.displayName || updater?.name || "Unknown", inline: true },
+			{ name: "⚡ Priority", value: priorityLabel || priority?.name || "No Priority", inline: true },
+			{ name: "🔧 Updated By", value: actor?.displayName || actor?.name || "Unknown", inline: true },
 			{ name: "🔢 Issue ID", value: `${identifier || `#${number}` || id}`, inline: true },
 		];
 
@@ -264,7 +317,7 @@ export class EmbedFactory {
 			fields.push({ name: "⏱️ Estimate", value: `${estimate} pts`, inline: true });
 		}
 
-		return {
+		const embed: DiscordEmbed = {
 			title: `🔄 Issue Updated: ${title}`,
 			url: url,
 			description: fullDescription.substring(0, 4096), // Discord limit
@@ -276,16 +329,26 @@ export class EmbedFactory {
 			},
 			timestamp: updatedAt || new Date().toISOString(),
 		};
+
+		// Add actor avatar if available
+		if (actor?.avatarUrl) {
+			embed.author = {
+				name: actor.displayName || actor.name || "Unknown User",
+				icon_url: actor.avatarUrl,
+				url: actor.url, // Link to Linear profile
+			};
+		}
+
+		return embed;
 	}
 
-	private static createIssueDeleteEmbed(issueData: LinearIssue): DiscordEmbed {
+	private static createIssueDeleteEmbed(actor: LinearUser, issueData: LinearIssue): DiscordEmbed {
 		const { 
 			id, 
 			title, 
 			team, 
 			state, 
 			assignee, 
-			creator,
 			priority,
 			project,
 			identifier,
@@ -294,13 +357,13 @@ export class EmbedFactory {
 
 		const description = `🗑️ **Issue has been deleted**
 
-The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${team?.name || "Unknown Team"}** has been permanently removed.`;
+The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${team?.name || "Unknown Team"}** has been permanently removed by **${actor?.displayName || actor?.name || "Unknown"}**.`;
 
 		const fields = [
 			{ name: "🏢 Team", value: team?.name || "Unknown Team", inline: true },
 			{ name: "📊 Last Status", value: state?.name || "Unknown", inline: true },
 			{ name: "👤 Last Assignee", value: assignee?.displayName || assignee?.name || "Unassigned", inline: true },
-			{ name: "✨ Created By", value: creator?.displayName || creator?.name || "Unknown", inline: true },
+			{ name: "🗑️ Deleted By", value: actor?.displayName || actor?.name || "Unknown", inline: true },
 			{ name: "⚡ Priority", value: priority?.name || "No Priority", inline: true },
 			{ name: "🔢 Issue ID", value: `${identifier || `#${number}` || id}`, inline: true },
 		];
@@ -309,7 +372,7 @@ The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${t
 			fields.push({ name: "📋 Project", value: project.name, inline: true });
 		}
 
-		return {
+		const embed: DiscordEmbed = {
 			title: `🗑️ Issue Deleted: ${title}`,
 			description,
 			color: 15158332, // Red
@@ -320,12 +383,23 @@ The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${t
 			},
 			timestamp: new Date().toISOString(),
 		};
+
+		// Add actor avatar if available
+		if (actor?.avatarUrl) {
+			embed.author = {
+				name: actor.displayName || actor.name || "Unknown User",
+				icon_url: actor.avatarUrl,
+				url: actor.url, // Link to Linear profile
+			};
+		}
+
+		return embed;
 	}
 
 	// --- Comment Embed Creators ---
 
-	private static createCommentCreateEmbed(commentData: LinearComment, url: string): DiscordEmbed {
-		const { body, user, issue, issueId, createdAt } = commentData;
+	private static createCommentCreateEmbed(actor: LinearUser, commentData: LinearComment, url: string): DiscordEmbed {
+		const { body, issue, issueId, createdAt } = commentData;
 		
 		// Build comprehensive description
 		let fullDescription = "";
@@ -347,7 +421,7 @@ The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${t
 		}
 
 		const fields = [
-			{ name: "💬 Comment By", value: user?.displayName || user?.name || "Unknown", inline: true },
+			{ name: "💬 Comment By", value: actor?.displayName || actor?.name || "Unknown", inline: true },
 			{ name: "📋 Issue", value: issue?.title || `Issue #${issueId}`, inline: true },
 			{ name: "🔢 Issue ID", value: issue?.identifier || `#${issue?.number}` || issueId || "Unknown", inline: true },
 		];
@@ -372,11 +446,11 @@ The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${t
 		}
 
 		// Add user context if available
-		if (user?.email) {
-			fields.push({ name: "📧 Author Email", value: user.email, inline: true });
+		if (actor?.email) {
+			fields.push({ name: "📧 Author Email", value: actor.email, inline: true });
 		}
 
-		return {
+		const embed: DiscordEmbed = {
 			title: `💬 New Comment Added`,
 			url: url,
 			description: fullDescription.substring(0, 4096), // Discord limit
@@ -388,10 +462,21 @@ The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${t
 			},
 			timestamp: createdAt || new Date().toISOString(),
 		};
+
+		// Add actor avatar if available
+		if (actor?.avatarUrl) {
+			embed.author = {
+				name: actor.displayName || actor.name || "Unknown User",
+				icon_url: actor.avatarUrl,
+				url: actor.url, // Link to Linear profile
+			};
+		}
+
+		return embed;
 	}
 
-	private static createCommentUpdateEmbed(commentData: LinearComment, url: string): DiscordEmbed {
-		const { body, user, issue, issueId, updatedAt, edited } = commentData;
+	private static createCommentUpdateEmbed(actor: LinearUser, commentData: LinearComment, url: string): DiscordEmbed {
+		const { body, issue, issueId, updatedAt, edited } = commentData;
 		
 		// Build comprehensive description
 		let fullDescription = "";
@@ -415,7 +500,7 @@ The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${t
 		}
 
 		const fields = [
-			{ name: "💬 Comment By", value: user?.displayName || user?.name || "Unknown", inline: true },
+			{ name: "💬 Comment By", value: actor?.displayName || actor?.name || "Unknown", inline: true },
 			{ name: "📋 Issue", value: issue?.title || `Issue #${issueId}`, inline: true },
 			{ name: "✏️ Status", value: edited ? "Edited" : "Updated", inline: true },
 			{ name: "🔢 Issue ID", value: issue?.identifier || `#${issue?.number}` || issueId || "Unknown", inline: true },
@@ -440,7 +525,7 @@ The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${t
 			}
 		}
 
-		return {
+		const embed: DiscordEmbed = {
 			title: `✏️ Comment Updated`,
 			url: url,
 			description: fullDescription.substring(0, 4096), // Discord limit
@@ -452,17 +537,28 @@ The issue **${title}** (\`${identifier || `#${number}` || id}\`) from team **${t
 			},
 			timestamp: updatedAt || new Date().toISOString(),
 		};
+
+		// Add actor avatar if available
+		if (actor?.avatarUrl) {
+			embed.author = {
+				name: actor.displayName || actor.name || "Unknown User",
+				icon_url: actor.avatarUrl,
+				url: actor.url, // Link to Linear profile
+			};
+		}
+
+		return embed;
 	}
 
-	private static createCommentDeleteEmbed(commentData: LinearComment): DiscordEmbed {
-		const { user, issue, issueId } = commentData;
+	private static createCommentDeleteEmbed(actor: LinearUser, commentData: LinearComment): DiscordEmbed {
+		const { issue, issueId } = commentData;
 		
 		const description = `🗑️ **Comment has been deleted**
 
-Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed from issue **${issue?.title || `#${issueId}`}**.`;
+Comment by **${actor?.displayName || actor?.name || "Unknown"}** has been removed from issue **${issue?.title || `#${issueId}`}**.`;
 
 		const fields = [
-			{ name: "💬 Comment By", value: user?.displayName || user?.name || "Unknown", inline: true },
+			{ name: "💬 Comment By", value: actor?.displayName || actor?.name || "Unknown", inline: true },
 			{ name: "📋 Issue", value: issue?.title || `Issue #${issueId}`, inline: true },
 			{ name: "🔢 Issue ID", value: issue?.identifier || `#${issue?.number}` || issueId || "Unknown", inline: true },
 		];
@@ -477,7 +573,7 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 			}
 		}
 
-		return {
+		const embed: DiscordEmbed = {
 			title: "🗑️ Comment Deleted",
 			description,
 			color: 15158332, // Red
@@ -488,11 +584,22 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 			},
 			timestamp: new Date().toISOString(),
 		};
+
+		// Add actor avatar if available
+		if (actor?.avatarUrl) {
+			embed.author = {
+				name: actor.displayName || actor.name || "Unknown User",
+				icon_url: actor.avatarUrl,
+				url: actor.url, // Link to Linear profile
+			};
+		}
+
+		return embed;
 	}
 
 	// --- Entity-Specific Embed Creators ---
 
-	private static createProjectEmbed(action: string, data: any, url: string): DiscordEmbed {
+	private static createProjectEmbed(action: string, _actor: LinearUser, data: any, url: string): DiscordEmbed {
 		const actionColor = this.getActionColor(action);
 		const title = `Project ${action.charAt(0).toUpperCase() + action.slice(1)}d`;
 		
@@ -513,7 +620,7 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 		};
 	}
 
-	private static createTeamEmbed(action: string, data: any, url: string): DiscordEmbed {
+	private static createTeamEmbed(action: string, _actor: LinearUser, data: any, url: string): DiscordEmbed {
 		const actionColor = this.getActionColor(action);
 		const title = `Team ${action.charAt(0).toUpperCase() + action.slice(1)}d`;
 		
@@ -534,7 +641,7 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 		};
 	}
 
-	private static createUserEmbed(action: string, data: any, url: string): DiscordEmbed {
+	private static createUserEmbed(action: string, _actor: LinearUser, data: any, url: string): DiscordEmbed {
 		const actionColor = this.getActionColor(action);
 		const title = `User ${action.charAt(0).toUpperCase() + action.slice(1)}d`;
 		
@@ -556,7 +663,7 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 		};
 	}
 
-	private static createCycleEmbed(action: string, data: any, url: string): DiscordEmbed {
+	private static createCycleEmbed(action: string, _actor: LinearUser, data: any, url: string): DiscordEmbed {
 		const actionColor = this.getActionColor(action);
 		const title = `Cycle ${action.charAt(0).toUpperCase() + action.slice(1)}d`;
 		
@@ -579,7 +686,7 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 		};
 	}
 
-	private static createLabelEmbed(action: string, data: any, url: string): DiscordEmbed {
+	private static createLabelEmbed(action: string, _actor: LinearUser, data: any, url: string): DiscordEmbed {
 		const actionColor = this.getActionColor(action);
 		const title = `Label ${action.charAt(0).toUpperCase() + action.slice(1)}d`;
 		
@@ -602,7 +709,7 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 
 	// --- Generic Fallback ---
 
-	private static createGenericEmbed(type: string, action: string, data: any, url: string): DiscordEmbed {
+	private static createGenericEmbed(type: string, action: string, _actor: LinearUser, data: any, url: string): DiscordEmbed {
 		const actionColor = this.getActionColor(action);
 		const title = `${type} ${action.charAt(0).toUpperCase() + action.slice(1)}d`;
 		const name = data.name || data.title || `${type} ${data.id}`;
@@ -663,10 +770,10 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 	/**
 	 * Generates content message for Discord webhook
 	 */
-	static generateContentMessage(type: string, action: string, data: any): string {
+	static generateContentMessage(type: string, action: string, actor: LinearUser, data: any): string {
 		switch (type) {
 			case "Issue":
-				const issueUser = data.creator?.displayName || data.creator?.name || data.updater?.displayName || data.updater?.name || "someone";
+				const issueUser = actor?.displayName || actor?.name || "someone";
 				const issueTitle = data.title ? `**${data.title}**` : "an issue";
 				const teamName = data.team?.name ? ` in **${data.team.name}**` : "";
 				const priority = data.priority?.name ? ` with **${data.priority.name}** priority` : "";
@@ -683,7 +790,7 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 				}
 				break;
 			case "Comment":
-				const commentUser = data.user?.displayName || data.user?.name || "someone";
+				const commentUser = actor?.displayName || actor?.name || "someone";
 				const issueContext = data.issue?.title ? ` on **${data.issue.title}**` : ` on issue #${data.issueId}`;
 				const issueTeam = data.issue?.team?.name ? ` (${data.issue.team.name})` : "";
 				
@@ -697,56 +804,59 @@ Comment by **${user?.displayName || user?.name || "Unknown"}** has been removed 
 				}
 				break;
 			case "Project":
-				const projectUser = data.creator?.displayName || data.creator?.name || "someone";
+				const projectUser = actor?.displayName || actor?.name || "someone";
 				const projectName = data.name ? `**${data.name}**` : "a project";
 				switch (action) {
 					case "create":
 						return `📋 ${projectUser} created project ${projectName}`;
 					case "update":
-						return `📋 Project ${projectName} was updated`;
+						return `📋 ${projectUser} updated project ${projectName}`;
 					case "remove":
-						return `📋 Project ${projectName} was deleted`;
+						return `📋 ${projectUser} deleted project ${projectName}`;
 				}
 				break;
 			case "Team":
-				const teamUser = data.creator?.displayName || data.creator?.name || "someone";
+				const teamUser = actor?.displayName || actor?.name || "someone";
 				const teamDisplayName = data.name ? `**${data.name}**` : "a team";
 				switch (action) {
 					case "create":
 						return `🏢 ${teamUser} created team ${teamDisplayName}`;
 					case "update":
-						return `🏢 Team ${teamDisplayName} was updated`;
+						return `🏢 ${teamUser} updated team ${teamDisplayName}`;
 					case "remove":
-						return `🏢 Team ${teamDisplayName} was deleted`;
+						return `🏢 ${teamUser} deleted team ${teamDisplayName}`;
 				}
 				break;
 			case "Cycle":
+				const cycleUser = actor?.displayName || actor?.name || "someone";
 				const cycleName = data.name ? `**${data.name}**` : "a cycle";
 				switch (action) {
 					case "create":
-						return `🔄 New cycle ${cycleName} was created`;
+						return `🔄 ${cycleUser} created cycle ${cycleName}`;
 					case "update":
-						return `🔄 Cycle ${cycleName} was updated`;
+						return `🔄 ${cycleUser} updated cycle ${cycleName}`;
 					case "remove":
-						return `🔄 Cycle ${cycleName} was deleted`;
+						return `🔄 ${cycleUser} deleted cycle ${cycleName}`;
 				}
 				break;
 			case "IssueLabel":
+				const labelUser = actor?.displayName || actor?.name || "someone";
 				const labelName = data.name ? `**${data.name}**` : "a label";
 				switch (action) {
 					case "create":
-						return `🏷️ New label ${labelName} was created`;
+						return `🏷️ ${labelUser} created label ${labelName}`;
 					case "update":
-						return `🏷️ Label ${labelName} was updated`;
+						return `🏷️ ${labelUser} updated label ${labelName}`;
 					case "remove":
-						return `🏷️ Label ${labelName} was deleted`;
+						return `🏷️ ${labelUser} deleted label ${labelName}`;
 				}
 				break;
 			default:
+				const entityUser = actor?.displayName || actor?.name || "someone";
 				const entityName = data.name || data.title || `${type} ${data.id}`;
-				return `${this.getActionEmoji(action)} ${type} **${entityName}** was ${action}d in Linear`;
+				return `${this.getActionEmoji(action)} ${entityUser} ${action}d ${type} **${entityName}** in Linear`;
 		}
-		return `${this.getActionEmoji(action)} ${type} ${action}d in Linear`;
+		return `${this.getActionEmoji(action)} ${actor?.displayName || actor?.name || "someone"} ${action}d ${type} in Linear`;
 	}
 
 	/**

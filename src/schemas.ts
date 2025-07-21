@@ -8,6 +8,8 @@ const LinearUserSchema = z
 		displayName: z.string().optional(),
 		email: z.email().optional(),
 		avatarUrl: z.url().optional(),
+		url: z.url().optional(), // Profile URL
+		type: z.string().optional(), // User type
 	})
 	.loose()
 	.optional();
@@ -85,12 +87,14 @@ export const LinearIssueSchema = z
 		id: z.string(),
 		title: z.string(),
 		description: z.string().optional().nullable(),
+		descriptionData: z.string().optional(), // Rich JSON description
 		state: LinearStateSchema,
 		assignee: LinearUserSchema,
 		creator: LinearUserSchema,
 		updater: LinearUserSchema,
 		team: LinearTeamSchema,
 		priority: LinearPrioritySchema,
+		priorityLabel: z.string().optional(), // Human readable priority
 		project: LinearProjectSchema,
 		cycle: LinearCycleSchema,
 		labels: z.array(LinearLabelSchema).optional(),
@@ -103,6 +107,26 @@ export const LinearIssueSchema = z
 		url: z.string().optional(),
 		branchName: z.string().optional(),
 		customerTicketCount: z.number().optional(),
+		// Lifecycle timestamps
+		startedAt: z.string().optional().nullable(),
+		completedAt: z.string().optional().nullable(),
+		canceledAt: z.string().optional().nullable(),
+		dueDate: z.string().optional().nullable(),
+		// SLA fields
+		slaStartedAt: z.string().optional().nullable(),
+		slaBreachesAt: z.string().optional().nullable(),
+		// Workflow tracking
+		triagedAt: z.string().optional().nullable(),
+		autoClosedAt: z.string().optional().nullable(),
+		// Scheduling
+		snoozedUntilAt: z.string().optional().nullable(),
+		// Engagement
+		subscriberIds: z.array(z.string()).optional(),
+		// Hierarchy
+		parentId: z.string().optional().nullable(),
+		// Metadata
+		trashed: z.boolean().optional().nullable(),
+		botActor: z.unknown().optional().nullable(),
 	})
 	.loose();
 
@@ -127,6 +151,7 @@ const BaseLinearEntitySchema = z.record(z.string(), z.unknown());
 export const LinearWebhookPayloadSchema = z
 	.object({
 		action: z.enum(["create", "update", "remove"]),
+		actor: LinearUserSchema, // The user who performed the action
 		type: z.enum([
 			"Issue",
 			"Comment",
@@ -164,6 +189,7 @@ export const LinearWebhookPayloadSchema = z
 	.loose(); // Allow unknown fields to pass through
 
 // Infer TypeScript types from schemas
+export type LinearUser = z.infer<typeof LinearUserSchema>;
 export type LinearIssue = z.infer<typeof LinearIssueSchema>;
 export type LinearComment = z.infer<typeof LinearCommentSchema>;
 export type LinearWebhookPayload = z.infer<typeof LinearWebhookPayloadSchema>;

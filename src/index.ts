@@ -142,7 +142,7 @@ app.post("/linear-webhook", async (req: Request, res: Response) => {
 		}
 
 		// Extract validated data
-		const { action, data, updatedFrom, url, type } = parsedPayload.data;
+		const { action, actor, data, updatedFrom, url, type } = parsedPayload.data;
 		
 		// Use url from payload or construct a fallback
 		const entityUrl = url || EmbedFactory.constructFallbackUrl(type, data);
@@ -154,16 +154,16 @@ app.post("/linear-webhook", async (req: Request, res: Response) => {
 		// Handle different Linear entity types using the factory
 		if (type === "Issue") {
 			const issueData = data as LinearIssue;
-			discordEmbed = EmbedFactory.createIssueEmbed(action, issueData, entityUrl, updatedFrom as Partial<LinearIssue>);
-			discordMessageContent = EmbedFactory.generateContentMessage(type, action, issueData);
+			discordEmbed = EmbedFactory.createIssueEmbed(action, actor, issueData, entityUrl, updatedFrom as Partial<LinearIssue>);
+			discordMessageContent = EmbedFactory.generateContentMessage(type, action, actor, issueData);
 		} else if (type === "Comment") {
 			const commentData = data as LinearComment;
-			discordEmbed = EmbedFactory.createCommentEmbed(action, commentData, entityUrl);
-			discordMessageContent = EmbedFactory.generateContentMessage(type, action, commentData);
+			discordEmbed = EmbedFactory.createCommentEmbed(action, actor, commentData, entityUrl);
+			discordMessageContent = EmbedFactory.generateContentMessage(type, action, actor, commentData);
 		} else {
 			// Handle other entity types with the factory
-			discordEmbed = EmbedFactory.createEntityEmbed(type, action, data, entityUrl);
-			discordMessageContent = EmbedFactory.generateContentMessage(type, action, data);
+			discordEmbed = EmbedFactory.createEntityEmbed(type, action, actor, data, entityUrl);
+			discordMessageContent = EmbedFactory.generateContentMessage(type, action, actor, data);
 		}
 
 		// Send Discord notification

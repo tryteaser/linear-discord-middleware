@@ -18,6 +18,11 @@ export interface DiscordEmbed {
 		value: string;
 		inline?: boolean;
 	}>;
+	author?: {
+		name: string;
+		icon_url?: string;
+		url?: string;
+	};
 	footer?: {
 		text: string;
 		icon_url?: string;
