@@ -9,12 +9,14 @@ This project provides a simple Node.js Express application that acts as a middle
 - Transforms Linear payload into rich Discord embed messages.
 - Sends notifications to a Discord webhook URL.
 - Built with TypeScript for type safety.
+- Code formatting and linting with [Biome](https://biomejs.dev/).
 
 ## Project Structure
 
 ```text
 .
 ├── .env.example
+├── biome.json
 ├── package.json
 ├── pnpm-lock.yaml
 ├── tsconfig.json
@@ -83,19 +85,26 @@ The server will start on the port specified in your `.env` file (default: 3000).
 
 ### Production
 
-For production use, first build the TypeScript source code:
-
-```bash
-pnpm build
-```
-
-Then, start the compiled application:
+For production use, the `postinstall` script will automatically build the TypeScript source code. You can then start the compiled application:
 
 ```bash
 pnpm start
 ```
 
 The server will run the compiled JavaScript from the `dist/` directory.
+
+## Linting and Formatting
+
+This project uses [Biome](https://biomejs.dev/) for code formatting and linting.
+
+- To check for issues:
+  ```bash
+  pnpm check
+  ```
+- To automatically fix issues:
+  ```bash
+  pnpm check:write
+  ```
 
 ## Deployment
 

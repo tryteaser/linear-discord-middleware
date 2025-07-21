@@ -42,5 +42,6 @@ export const LinearWebhookPayloadSchema = z.object({
     type: z.literal("Issue"),
     data: LinearIssueSchema,
     updatedFrom: LinearIssueSchema.partial().optional(),
+    webhookTimestamp: z.number(),
 });
 //# sourceMappingURL=schemas.js.map

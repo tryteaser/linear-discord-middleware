@@ -48,6 +48,7 @@ export const LinearWebhookPayloadSchema = z.object({
 	type: z.literal("Issue"),
 	data: LinearIssueSchema,
 	updatedFrom: LinearIssueSchema.partial().optional(),
+	webhookTimestamp: z.number(),
 });
 
 // Infer TypeScript types from schemas

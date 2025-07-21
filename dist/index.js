@@ -141,22 +141,26 @@ function deleteIssueEmbed(issueData) {
 /**
  * Verifies the Linear webhook signature.
  */
-function verifySignature(signature, payload, secret) {
+function verifySignature(signature, payload, secret, webhookTimestamp) {
     if (!secret) {
         console.warn("LINEAR_WEBHOOK_SECRET is not set. Webhook signature verification skipped.");
         return true; // If no secret is set, skip verification (less secure)
     }
     try {
-        const [t, s] = signature.split(",").map((part) => part.split("="));
-        const _timestamp = parseInt(t[1], 10);
-        const expectedSignature = s[1];
+        // Check if the timestamp is recent (e.g., within 60 seconds) to prevent replay attacks
+        const now = Date.now();
+        const oneMinute = 60 * 1000;
+        if (Math.abs(now - webhookTimestamp) > oneMinute) {
+            console.error("Webhook timestamp is too old. Potential replay attack.");
+            return false;
+        }
         // Calculate HMAC-SHA256 hash of the raw payload
         const hmac = crypto.createHmac("sha256", secret);
         hmac.update(payload);
         const digest = hmac.digest("hex");
         // Compare the calculated signature with the received signature
         // Use crypto.timingSafeEqual to prevent timing attacks
-        const signatureBuffer = Buffer.from(expectedSignature);
+        const signatureBuffer = Buffer.from(signature);
         const digestBuffer = Buffer.from(digest);
         if (signatureBuffer.length !== digestBuffer.length) {
             return false;
@@ -174,14 +178,15 @@ app.post("/linear-webhook", async (req, res) => {
         const linearSignature = req.headers["linear-signature"];
         // Since we're using bodyParser.raw for this route, req.body is a Buffer
         const rawBody = req.body.toString();
+        const body = JSON.parse(rawBody);
         // Verify the signature before parsing the payload
         if (LINEAR_WEBHOOK_SECRET &&
-            !verifySignature(linearSignature, rawBody, LINEAR_WEBHOOK_SECRET)) {
+            !verifySignature(linearSignature, rawBody, LINEAR_WEBHOOK_SECRET, body.webhookTimestamp)) {
             console.error("Invalid Linear webhook signature!");
             return res.status(401).send("Invalid signature");
         }
         // Parse and validate the payload with Zod
-        const parsedPayload = LinearWebhookPayloadSchema.safeParse(JSON.parse(rawBody));
+        const parsedPayload = LinearWebhookPayloadSchema.safeParse(body);
         if (!parsedPayload.success) {
             console.error("Invalid Linear webhook payload:", z.treeifyError(parsedPayload.error));
             return res.status(400).send({
