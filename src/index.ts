@@ -70,6 +70,12 @@ app.use('/linear-webhook', bodyParser.raw({ type: 'application/json' }));
 // Use JSON parser for all other routes
 app.use(bodyParser.json());
 
+// --- Request Logger Middleware ---
+app.use((req: Request, res: Response, next) => {
+  console.log(`[${new Date().toISOString()}] Received ${req.method} request for ${req.url}`);
+  next();
+});
+
 // --- Helper Functions for Discord Embeds ---
 
 /**
@@ -194,12 +200,9 @@ function verifySignature(signature: string, payload: string, secret: string): bo
     const timestamp = parseInt(t[1], 10);
     const expectedSignature = s[1];
 
-    // Reconstruct the signed payload
-    const signedPayload = `${timestamp}.${payload}`;
-
-    // Calculate HMAC-SHA256 hash
+    // Calculate HMAC-SHA256 hash of the raw payload
     const hmac = crypto.createHmac('sha256', secret);
-    hmac.update(signedPayload);
+    hmac.update(payload);
     const digest = hmac.digest('hex');
 
     // Compare the calculated signature with the received signature
