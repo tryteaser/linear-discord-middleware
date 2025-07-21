@@ -66,12 +66,11 @@ app.use((req: Request, _res: Response, next) => {
 /**
  * Generates a Discord embed for a new Linear issue.
  */
-function createIssueEmbed(issueData: LinearIssue): DiscordEmbed {
+function createIssueEmbed(issueData: LinearIssue, url: string): DiscordEmbed {
 	const {
 		id,
 		title,
 		description,
-		url,
 		state,
 		assignee,
 		creator,
@@ -111,9 +110,10 @@ function createIssueEmbed(issueData: LinearIssue): DiscordEmbed {
  */
 function updateIssueEmbed(
 	issueData: LinearIssue,
+	url: string,
 	updatedFrom: Partial<LinearIssue> = {},
 ): DiscordEmbed {
-	const { id, title, url, state, assignee, team, priority } = issueData;
+	const { id, title, state, assignee, team, priority } = issueData;
 
 	const changes: string[] = [];
 	const color = 16776960; // Yellow for updates
@@ -288,7 +288,7 @@ app.post("/linear-webhook", async (req: Request, res: Response) => {
 		}
 
 		// Extract validated data
-		const { action, data, updatedFrom } = parsedPayload.data;
+		const { action, data, updatedFrom, url } = parsedPayload.data;
 
 		// We already validate type is 'Issue' in the schema, so no further check is needed here.
 
@@ -297,11 +297,11 @@ app.post("/linear-webhook", async (req: Request, res: Response) => {
 
 		switch (action) {
 			case "create":
-				discordEmbed = createIssueEmbed(data);
+				discordEmbed = createIssueEmbed(data, url);
 				discordMessageContent = `A new issue has been created by ${data.creator ? data.creator.name : "someone"}.`;
 				break;
 			case "update":
-				discordEmbed = updateIssueEmbed(data, updatedFrom);
+				discordEmbed = updateIssueEmbed(data, url, updatedFrom);
 				discordMessageContent = `Issue **${data.title}** has been updated by ${data.updater ? data.updater.name : "someone"}.`;
 				break;
 			case "remove": // Linear uses 'remove' for deletion

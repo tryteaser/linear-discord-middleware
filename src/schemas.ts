@@ -33,7 +33,6 @@ export const LinearIssueSchema = z.object({
 	id: z.string(),
 	title: z.string(),
 	description: z.string().optional().nullable(),
-	url: z.url(),
 	state: LinearStateSchema,
 	assignee: LinearUserSchema,
 	creator: LinearUserSchema,
@@ -46,6 +45,7 @@ export const LinearIssueSchema = z.object({
 export const LinearWebhookPayloadSchema = z.object({
 	action: z.enum(["create", "update", "remove"]),
 	type: z.literal("Issue"),
+	url: z.url(),
 	data: LinearIssueSchema,
 	updatedFrom: LinearIssueSchema.partial().optional(),
 	webhookTimestamp: z.number(),

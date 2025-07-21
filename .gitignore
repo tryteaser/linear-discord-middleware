@@ -5,3 +5,8 @@ npm-debug.log
 .env.development
 .env.test
 .env.production
+dist/
+build/
+.DS_Store
+.idea/
+.vscode/
